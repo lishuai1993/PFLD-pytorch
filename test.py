@@ -69,20 +69,20 @@ def validate(wlfw_val_dataloader, plfd_backbone):
     nme_list = []
     cost_time = []
     with torch.no_grad():
-        for img, landmark_gt, _, _ in wlfw_val_dataloader:
-            img = img.to(device)
+        for img, landmark_gt, _, _ in wlfw_val_dataloader:          # batch_size操作
+            img = img.to(device)                            # 强制使用gpu
             landmark_gt = landmark_gt.to(device)
             plfd_backbone = plfd_backbone.to(device)
 
             start_time = time.time()
-            _, landmarks = plfd_backbone(img)
+            _, landmarks = plfd_backbone(img)               # 是归一化的结果，需要乘以图像的宽、高
             cost_time.append(time.time() - start_time)
 
             landmarks = landmarks.cpu().numpy()
-            landmarks = landmarks.reshape(landmarks.shape[0], -1, 2) # landmark 
+            landmarks = landmarks.reshape(landmarks.shape[0], -1, 2)                    # landmark batch_size操作
             landmark_gt = landmark_gt.reshape(landmark_gt.shape[0], -1, 2).cpu().numpy() # landmark_gt
 
-            if args.show_image:
+            if args.show_image:                         # 每一个batch中仅显示一个图像
                 show_img = np.array(np.transpose(img[0].cpu().numpy(), (1, 2, 0)))
                 show_img = (show_img * 255).astype(np.uint8)
                 np.clip(show_img, 0, 255)

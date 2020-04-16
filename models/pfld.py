@@ -130,7 +130,7 @@ class PFLDInference(nn.Module):
         multi_scale = torch.cat([x1, x2, x3], 1)
         landmarks = self.fc(multi_scale)
 
-        return out1, landmarks
+        return out1, landmarks          #
 
 
 class AuxiliaryNet(nn.Module):
