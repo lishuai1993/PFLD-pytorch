@@ -139,6 +139,7 @@ def show_bboxes(img, bounding_boxes, facial_landmarks=[]):
     for p in facial_landmarks:
         for i in range(5):
             cv2.circle(draw, (p[i], p[i + 5]), 1, (255, 0, 0), -1)
+    cv2.circle(draw, (100, 15), 1, (255, 0, 0), -1)
     return draw
 
 
@@ -363,16 +364,54 @@ def detect_faces(image,
     return bounding_boxes, landmarks
 
 
-# if __name__ == '__main__':
-#     import cv2
-#     cap = cv2.VideoCapture(0)
-#     while True:
-#         ret, img = cap.read()
-#         if not ret: break
-#         bounding_boxes, landmarks = detect_faces(img)
-#         image = show_bboxes(img, bounding_boxes, landmarks)
+if __name__ == '__main__':
+    import cv2
+    # cap = cv2.VideoCapture(0)
+    # while True:
+    #     ret, img = cap.read()
+    #     if not ret:
+    #         break
+    img = cv2.imread('/home/shuai.li/code/fkp/PFLD-pytorch/data/samp.jpg')
+    # print(img.shape)
+    bounding_boxes, landmarks = detect_faces(img)
+    # print(bounding_boxes)
+    ul = np.array(bounding_boxes[0, 0:2])
+    br = np.array(bounding_boxes[0, 2:4])
+    w = br[0] - ul[0]
+    h = br[1] - ul[1]
 
-#         # image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-#         cv2.imshow('0', image)
-#         if cv2.waitKey(10) == 27:
-#             break
+    uls = (ul - np.array([w*0.1, h*0.1])).astype(np.int)
+    brs = (br + np.array([w*0.1, h*0.1])).astype(np.int)
+
+    w, h = brs - uls
+
+    if h > w:
+        diff = h-w
+        uls[0] = uls[0] - math.floor(diff/2)
+        brs[0] = brs[0] + math.ceil(diff/2)
+    else:
+        diff = w - h
+        uls[1] = uls[1] - math.floor(diff/2)
+        brs[1] = brs[1] + math.floor(diff/2)
+
+    img_rect = img[uls[1]:brs[1], uls[0]:brs[0], :]
+
+    cv2.imshow('imgorg', img)
+    cv2.imshow('imgrect', img_rect)
+
+
+
+
+
+
+
+
+
+
+    # image = show_bboxes(img, bounding_boxes, landmarks)
+    #
+    # # image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+    # cv2.imshow('0', image)
+    # cv2.waitKey(0)
+    # if cv2.waitKey(10) == 27:
+    #     break

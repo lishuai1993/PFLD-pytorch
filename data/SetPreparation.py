@@ -3,6 +3,7 @@ import os
 import numpy as np
 import cv2
 import shutil
+from tqdm import tqdm
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
 from pfld.utils import calculate_pitch_yaw_roll
@@ -180,7 +181,7 @@ def get_dataset_list(imgDir, outDir, landmarkDir, is_train):
 
         if debug:
             lines = lines[:100]
-        for i, line in enumerate(lines):
+        for i, line in enumerate(lines):                        # 196个关键点的坐标，box的四个坐标点，6个属性，图像相对路径
             Img = ImageDate(line, imgDir)
             img_name = Img.path
             Img.load_data(is_train, 10, Mirror_file)
@@ -204,7 +205,7 @@ if __name__ == '__main__':
                     'WFLW/WFLW_annotations/list_98pt_rect_attr_train_test/list_98pt_rect_attr_train.txt']
 
     outDirs = ['test_data', 'train_data']
-    for landmarkDir, outDir in zip(landmarkDirs, outDirs):
+    for landmarkDir, outDir in tqdm(zip(landmarkDirs, outDirs)):            # 目的是做什么
         outDir = os.path.join(root_dir, outDir)
         print(outDir)
         if os.path.exists(outDir):

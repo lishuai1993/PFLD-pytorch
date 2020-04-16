@@ -15,9 +15,11 @@ import torch
 from torchvision import transforms
 from torch.utils.data import DataLoader
 import torch.backends.cudnn as cudnn
-from dataset.datasets import WLFWDatasets
+from dataset.datasets import WLFWDatasets#, WLFWDatasetsInfer
 
 from models.pfld import PFLDInference
+
+from tqdm import tqdm
 
 cudnn.benchmark = True
 cudnn.determinstic = True
@@ -68,8 +70,10 @@ def validate(wlfw_val_dataloader, plfd_backbone):
 
     nme_list = []
     cost_time = []
+
+
     with torch.no_grad():
-        for img, landmark_gt, _, _ in wlfw_val_dataloader:          # batch_size操作
+        for img, landmark_gt, _, _ in tqdm(wlfw_val_dataloader):          # batch_size操作
             img = img.to(device)                            # 强制使用gpu
             landmark_gt = landmark_gt.to(device)
             plfd_backbone = plfd_backbone.to(device)
@@ -111,6 +115,48 @@ def validate(wlfw_val_dataloader, plfd_backbone):
         # inference time
         print("inference_cost_time: {0:4f}".format(np.mean(cost_time)))
 
+def infer(wlfw_val_dataloader, plfd_backbone, presave):
+
+    plfd_backbone.eval()
+
+    nme_list = []
+    cost_time = []
+
+    with open(presave, 'w') as ps:
+        with torch.no_grad():
+            for img, imgpath in tqdm(wlfw_val_dataloader):  # batch_size操作
+                img = img.to(device)                            # 强制使用gpu
+                plfd_backbone = plfd_backbone.to(device)
+
+                start_time = time.time()
+                _, landmarks = plfd_backbone(img)               # 是归一化的结果，需要乘以图像的宽、高
+                cost_time.append(time.time() - start_time)
+
+                landmarks = landmarks.cpu().numpy()
+                landmarks = landmarks.reshape(landmarks.shape[0], -1, 2)  # landmark batch_size操作
+                for name, land in zip(imgpath, landmarks.to_list()):
+                    land = land.reshape(-1)
+                    land = list(map(str, land))
+                    ps.write(name + ' ')
+                    ps.writelines(land.append('\n'))
+
+                if args.show_image:             # 每一个batch中仅显示一个图像
+                    show_img = np.array(np.transpose(img[0].cpu().numpy(), (1, 2, 0)))
+                    show_img = (show_img * 255).astype(np.uint8)
+                    np.clip(show_img, 0, 255)
+
+                    pre_landmark = landmarks[0] * [112, 112]
+
+                    cv2.imwrite("xxx.jpg", show_img)
+                    img_clone = cv2.imread("xxx.jpg")
+
+                    for (x, y) in pre_landmark.astype(np.int32):
+                        cv2.circle(img_clone, (x, y), 1, (255, 0, 0), -1)
+                    cv2.imshow("xx.jpg", img_clone)
+                    cv2.waitKey(0)
+
+
+
 def main(args):
     checkpoint = torch.load(args.model_path, map_location=device)
     plfd_backbone = PFLDInference().to(device)
@@ -122,14 +168,27 @@ def main(args):
 
     validate(wlfw_val_dataloader, plfd_backbone)
 
+def InferLandmark(args):
+    checkpoint = torch.load(args.model_path, map_location=device)
+    plfd_backbone = PFLDInference().to(device)
+    plfd_backbone.load_state_dict(checkpoint['plfd_backbone'])
+
+    transform = transforms.Compose([transforms.ToTensor()])
+    wlfw_val_dataset = WLFWDatasetsInfer(args.test_dataset, transform)
+    wlfw_val_dataloader = DataLoader(wlfw_val_dataset, batch_size=1, shuffle=False, num_workers=0)
+
+    infer(wlfw_val_dataloader, plfd_backbone, args.presave)
+
 def parse_args():
     parser = argparse.ArgumentParser(description='Testing')
     parser.add_argument('--model_path', default="./checkpoint/snapshot/checkpoint.pth.tar", type=str)
     parser.add_argument('--test_dataset', default='./data/test_data/list.txt', type=str)
     parser.add_argument('--show_image', default=False, type=bool)
+    parser.add_argument('--presave', default='./data/test_data/prelandmark.txt', type=str)
     args = parser.parse_args()
     return args
 
 if __name__ == "__main__":
     args = parse_args()
     main(args)
+    # InferLandmark(args)

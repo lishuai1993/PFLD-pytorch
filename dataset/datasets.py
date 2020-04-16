@@ -152,20 +152,40 @@ class WLFWDatasets(data.Dataset):
         self.euler_angle = None
         self.transforms = transforms
         with open(file_list, 'r') as f:
-            self.lines = f.readlines()
+            self.lines = f.readlines()              # 一个list，每一个元素是file文件中的一行
         
     def __getitem__(self, index):
-        self.line = self.lines[index].strip().split()
+        self.line = self.lines[index].strip().split()   # 4部分，图片地址、98个关键点、6种属性、4个角度
         self.img = cv2.imread(self.line[0])
         self.landmark = np.asarray(self.line[1:197], dtype=np.float32)
         self.attribute = np.asarray(self.line[197:203], dtype=np.int32)
         self.euler_angle = np.asarray(self.line[203:206], dtype=np.float32)
         if self.transforms:
-            self.img = self.transforms(self.img)
+            self.img = self.transforms(self.img)            # 暂定认为是放射变换
         return (self.img, self.landmark, self.attribute, self.euler_angle)
 
     def __len__(self):
         return len(self.lines)
+
+
+# class WLFWDatasetsInfer(data.dataset):
+#     def __init__(self, file_list, transforms=None):
+#         self.line = None
+#         self.transforms = transforms
+#         with open(file_list, 'r') as f:
+#             self.lines = f.readlines()
+#
+#     def __getitem__(self, index):
+#         self.line = self.lines[index].strip().split()  # 1部分: 图片地址
+#         self.img = cv2.imread(self.line[0])
+#         if self.transforms:
+#             self.img = self.transforms(self.img)  # 暂定认为是放射变换
+#         return (self.img, self.line[0])
+#
+#     def __len__(self):
+#         return len(self.lines)
+
+
 
 if __name__ == '__main__':
     file_list = './data/test_data/list.txt'
