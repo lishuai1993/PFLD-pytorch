@@ -2,9 +2,13 @@ import numpy as np
 import cv2
 import sys
 sys.path.append('..')
+sys.path.append('../mtcnn')
 
 from torch.utils import data
 from torch.utils.data import DataLoader
+from copy import deepcopy
+from mtcnn.detector import detect_faces
+import math
 
 def flip(img, annotation):
     # parse
@@ -168,22 +172,56 @@ class WLFWDatasets(data.Dataset):
         return len(self.lines)
 
 
-# class WLFWDatasetsInfer(data.dataset):
-#     def __init__(self, file_list, transforms=None):
-#         self.line = None
-#         self.transforms = transforms
-#         with open(file_list, 'r') as f:
-#             self.lines = f.readlines()
-#
-#     def __getitem__(self, index):
-#         self.line = self.lines[index].strip().split()  # 1部分: 图片地址
-#         self.img = cv2.imread(self.line[0])
-#         if self.transforms:
-#             self.img = self.transforms(self.img)  # 暂定认为是放射变换
-#         return (self.img, self.line[0])
-#
-#     def __len__(self):
-#         return len(self.lines)
+
+
+
+class WLFWDatasetsInfer(data.Dataset):
+    def __init__(self, file_list, transforms=None):
+        self.line = None
+        self.transforms = transforms
+        with open(file_list, 'r') as f:
+            self.lines = f.readlines()
+
+    def __getitem__(self, index):
+        self.line = self.lines[index].strip().split()  # 1部分: 图片地址
+
+        # self.img = cv2.imread(self.line[0])
+        self.img = self.detection(self.line[0])
+        if self.transforms:
+            self.img = self.transforms(self.img)  # 暂定认为是放射变换
+        return (self.img, self.line[0], self.box, self.factor)
+
+    def detection(self, imgpath):
+        img = cv2.imread(imgpath)
+        bounding_boxes, _ = detect_faces(img)
+        ul = np.array(bounding_boxes[0, 0:2])
+        br = np.array(bounding_boxes[0, 2:4])
+        w = br[0] - ul[0]
+        h = br[1] - ul[1]
+        uls = (ul - np.array([w * 0.1, h * 0.1])).astype(np.int)
+        brs = (br + np.array([w * 0.1, h * 0.1])).astype(np.int)
+
+        w, h = brs - uls
+        if h > w:
+            diff = h - w
+            uls[0] = uls[0] - math.floor(diff / 2)
+            brs[0] = brs[0] + math.ceil(diff / 2)
+        else:
+            diff = w - h
+            uls[1] = uls[1] - math.floor(diff / 2)
+            brs[1] = brs[1] + math.floor(diff / 2)
+        self.uls = uls
+        self.brs = brs
+        self.box = [*uls, *brs]
+        self.factor = (self.brs[0] - self.uls[0]) / 112
+
+        img112 = cv2.resize(deepcopy(img[uls[1]:brs[1], uls[0]:brs[0], :]), (112, 112), interpolation=cv2.INTER_CUBIC)
+
+        return img112
+
+
+    def __len__(self):
+        return len(self.lines)
 
 
 

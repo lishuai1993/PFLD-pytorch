@@ -15,11 +15,14 @@ import torch
 from torchvision import transforms
 from torch.utils.data import DataLoader
 import torch.backends.cudnn as cudnn
-from dataset.datasets import WLFWDatasets#, WLFWDatasetsInfer
+from dataset.datasets import WLFWDatasets, WLFWDatasetsInfer
 
 from models.pfld import PFLDInference
 
 from tqdm import tqdm
+import math
+from copy import deepcopy
+import os.path as path
 
 cudnn.benchmark = True
 cudnn.determinstic = True
@@ -121,10 +124,11 @@ def infer(wlfw_val_dataloader, plfd_backbone, presave):
 
     nme_list = []
     cost_time = []
+    org = True
 
     with open(presave, 'w') as ps:
         with torch.no_grad():
-            for img, imgpath in tqdm(wlfw_val_dataloader):  # batch_size操作
+            for img, imgpath, box, factor in tqdm(wlfw_val_dataloader):  # batch_size操作
                 img = img.to(device)                            # 强制使用gpu
                 plfd_backbone = plfd_backbone.to(device)
 
@@ -134,26 +138,80 @@ def infer(wlfw_val_dataloader, plfd_backbone, presave):
 
                 landmarks = landmarks.cpu().numpy()
                 landmarks = landmarks.reshape(landmarks.shape[0], -1, 2)  # landmark batch_size操作
-                for name, land in zip(imgpath, landmarks.to_list()):
+
+
+                if org:
+                    landmarks = landmarks[0] * [112, 112] * [factor.item(), factor.item()]
+                    # landmarks = landmarks *  torch.tensor([factor, factor])
+                    landmarks = landmarks + box[0:2]
+
+                for name, land in zip(imgpath, list([landmarks])):
                     land = land.reshape(-1)
                     land = list(map(str, land))
                     ps.write(name + ' ')
-                    ps.writelines(land.append('\n'))
+                    for item in land:
+                        ps.write(item + ' ')
+                    ps.write('\n')
+
 
                 if args.show_image:             # 每一个batch中仅显示一个图像
-                    show_img = np.array(np.transpose(img[0].cpu().numpy(), (1, 2, 0)))
-                    show_img = (show_img * 255).astype(np.uint8)
-                    np.clip(show_img, 0, 255)
+                    if org:
+                        show_img = cv2.imread(imgpath[0])                   # 原图
+                        pre_landmark = landmarks                            # 原图中的landmark
+                    else:
+                        show_img = np.array(np.transpose(img[0].cpu().numpy(), (1, 2, 0)))
+                        show_img = (show_img * 255).astype(np.uint8)
+                        np.clip(show_img, 0, 255)
+                        pre_landmark = landmarks[0] * [112, 112]
 
-                    pre_landmark = landmarks[0] * [112, 112]
 
-                    cv2.imwrite("xxx.jpg", show_img)
+                    # 转换成384*384的图像，关键点也作相应的转换
+                    ul = np.min(pre_landmark, axis=0)
+                    br = np.max(pre_landmark, axis=0)
+
+                    w = br[0] - ul[0]
+                    h = br[1] - ul[1]
+                    uls = (ul - np.array([w * 0.1, h * 0.1])).astype(np.int)
+                    brs = (br + np.array([w * 0.1, h * 0.1])).astype(np.int)
+
+                    w, h = brs - uls
+                    if h > w:
+                        diff = h - w
+                        uls[0] = uls[0] - math.floor(diff / 2)
+                        brs[0] = brs[0] + math.ceil(diff / 2)
+                    else:
+                        diff = w - h
+                        uls[1] = uls[1] - math.floor(diff / 2)
+                        brs[1] = brs[1] + math.floor(diff / 2)
+
+                    show_img = deepcopy(show_img[uls[1]:brs[1], uls[0]:brs[0], :])
+                    show_img = cv2.resize(show_img, (384, 384), interpolation=cv2.INTER_CUBIC)
+                    factor = max(w, h) / 384
+                    pre_landmark = (pre_landmark - uls) / factor
+
+                    # 显示图片
+                    img_save = '/home/shuai.li/dset/WFLW/temp/ls_384.jpg'
+                    cv2.imwrite(img_save, show_img)
                     img_clone = cv2.imread("xxx.jpg")
+
+                    pre_landmark_str = list(map(str, pre_landmark.reshape(-1)))
+
+                    with open('/home/shuai.li/dset/WFLW/test_2.txt', 'r') as fp1:
+                        kplist = fp1.readlines()
+                    with open('/home/shuai.li/dset/WFLW/test_2.txt', 'w') as fp1:
+                        fp1.write(kplist[0])
+                        for item in pre_landmark_str:
+                            fp1.write(item + ' ')
+                        fp1.write(path.basename(img_save) + '\n')
 
                     for (x, y) in pre_landmark.astype(np.int32):
                         cv2.circle(img_clone, (x, y), 1, (255, 0, 0), -1)
                     cv2.imshow("xx.jpg", img_clone)
                     cv2.waitKey(0)
+
+
+
+
 
 
 
@@ -182,7 +240,7 @@ def InferLandmark(args):
 def parse_args():
     parser = argparse.ArgumentParser(description='Testing')
     parser.add_argument('--model_path', default="./checkpoint/snapshot/checkpoint.pth.tar", type=str)
-    parser.add_argument('--test_dataset', default='./data/test_data/list.txt', type=str)
+    parser.add_argument('--test_dataset', default='./data/test_data/list_1.txt', type=str)
     parser.add_argument('--show_image', default=False, type=bool)
     parser.add_argument('--presave', default='./data/test_data/prelandmark.txt', type=str)
     args = parser.parse_args()
@@ -190,5 +248,5 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
-    main(args)
-    # InferLandmark(args)
+    # main(args)
+    InferLandmark(args)
